@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -77,6 +77,12 @@ pub struct TaskControlBlockInner {
 
     /// priority
     pub priority: isize,
+
+    /// The count of each syscall
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// The time (in ms) when the task is first scheduled
+    pub start_time: usize,
 }
 
 impl TaskControlBlockInner {
@@ -133,6 +139,8 @@ impl TaskControlBlock {
                     stride: 0,
                     pass: 0,
                     priority: 16,
+                    start_time: 0,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         };
@@ -209,6 +217,8 @@ impl TaskControlBlock {
                     stride: 0,
                     pass: 0,
                     priority: 16,
+                    start_time: 0,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         });
@@ -254,6 +264,17 @@ impl TaskControlBlock {
             None
         }
     }
+}
+
+/// Task information
+#[allow(dead_code)]
+pub struct TaskInfo {
+    /// Task status in it's life cycle
+    pub status: TaskStatus,
+    /// The numbers of syscall called by task
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    /// Total running time of task
+    pub time: usize,
 }
 
 #[derive(Copy, Clone, PartialEq)]
