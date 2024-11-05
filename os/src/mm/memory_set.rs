@@ -70,6 +70,16 @@ impl MemorySet {
         }
         self.areas.push(map_area);
     }
+    /// Delete MapArea
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
+        for r in &mut self.areas {
+            if r.vpn_range.get_start().0 == start_va.0 && r.vpn_range.get_end().0 == end_va.0 {
+                r.unmap(&mut self.page_table);
+                return 0;
+            }
+        }
+        return -1;
+    }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
         self.page_table.map(
@@ -261,6 +271,18 @@ impl MemorySet {
         } else {
             false
         }
+    }
+
+    /// check if vpn is allocated
+    pub fn check_vpn_allocated(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        for r in &self.areas {
+            if end.0 <= r.vpn_range.get_start().0 || start.0 >= r.vpn_range.get_end().0 {
+                continue;
+            } else {
+                return true;
+            }
+        }
+        return false;
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory

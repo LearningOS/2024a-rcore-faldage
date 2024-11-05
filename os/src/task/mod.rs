@@ -15,12 +15,14 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::MapPermission;
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
-pub use task::{TaskControlBlock, TaskStatus};
+pub use task::{TaskControlBlock, TaskInfo, TaskStatus};
 
 pub use context::TaskContext;
 
@@ -153,6 +155,58 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn get_current_task_info(&self) -> TaskInfo {
+        let inner = self.inner.exclusive_access();
+        let current = &inner.tasks[inner.current_task];
+        TaskInfo {
+            status: current.task_status,
+            syscall_times: current.syscall_times,
+            time: get_time_ms() - current.start_time,
+        }
+    }
+
+    fn increase_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_times[syscall_id] += 1;
+    }
+
+    fn insert_framed_area(
+        &self,
+        start_va: crate::mm::VirtAddr,
+        end_va: crate::mm::VirtAddr,
+        permission: MapPermission,
+    ) {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        let current = &mut inner.tasks[current_task];
+        current
+            .memory_set
+            .insert_framed_area(start_va, end_va, permission);
+    }
+
+    fn remove_framed_area(
+        &self,
+        start_va: crate::mm::VirtAddr,
+        end_va: crate::mm::VirtAddr,
+    ) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        let current = &mut inner.tasks[current_task];
+        current.memory_set.remove_framed_area(start_va, end_va)
+    }
+
+    fn check_vpn_allocated(
+        &self,
+        start_va: crate::mm::VirtAddr,
+        end_va: crate::mm::VirtAddr,
+    ) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        let current = &mut inner.tasks[current_task];
+        current.memory_set.check_vpn_allocated(start_va, end_va)
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +255,34 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Get status of current task.
+pub fn get_current_task_info() -> TaskInfo {
+    TASK_MANAGER.get_current_task_info()
+}
+/// Increase syscall count for current task.
+pub fn increase_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.increase_syscall_times(syscall_id);
+}
+
+/// Insert framed virtual area
+pub fn insert_framed_area_to_current_task(
+    start_va: crate::mm::VirtAddr,
+    end_va: crate::mm::VirtAddr,
+    permission: MapPermission,
+) {
+    TASK_MANAGER.insert_framed_area(start_va, end_va, permission);
+}
+
+/// Remove virtual area
+pub fn remove_framed_area_from_current_task(
+    start_va: crate::mm::VirtAddr,
+    end_va: crate::mm::VirtAddr,
+) -> isize {
+    TASK_MANAGER.remove_framed_area(start_va, end_va)
+}
+/// check if vpn is allocated
+pub fn check_vpn_allocated(start_va: crate::mm::VirtAddr, end_va: crate::mm::VirtAddr) -> bool {
+    TASK_MANAGER.check_vpn_allocated(start_va, end_va)
 }
