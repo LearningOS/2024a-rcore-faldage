@@ -72,13 +72,17 @@ impl MemorySet {
     }
     /// Delete MapArea
     pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
-        for r in &mut self.areas {
-            if r.vpn_range.get_start().0 == start_va.0 && r.vpn_range.get_end().0 == end_va.0 {
-                r.unmap(&mut self.page_table);
-                return 0;
-            }
+        let idx = self.areas.iter().position(|r| {
+            VirtAddr::from(r.vpn_range.get_start()) == start_va
+                && VirtAddr::from(r.vpn_range.get_end()) == end_va
+        });
+        if let Some(idx) = idx {
+            self.areas[idx].unmap(&mut self.page_table);
+            self.areas.remove(idx);
+            0
+        } else {
+            -1
         }
-        return -1;
     }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
