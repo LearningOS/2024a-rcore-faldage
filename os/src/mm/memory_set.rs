@@ -313,8 +313,10 @@ impl MemorySet {
 
     /// check if vpn is allocated
     pub fn check_vpn_allocated(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        let start_pagenum = start.floor();
+        let end_pagenum = end.ceil();
         for r in &self.areas {
-            if end.0 <= r.vpn_range.get_start().0 || start.0 >= r.vpn_range.get_end().0 {
+            if end_pagenum <= r.vpn_range.get_start() || start_pagenum >= r.vpn_range.get_end() {
                 continue;
             } else {
                 return true;
