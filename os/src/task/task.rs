@@ -68,6 +68,15 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// The "length" the process has currently been running
+    pub stride: usize,
+
+    /// The value that stride needs to accumulate after the process is scheduled.
+    pub pass: usize,
+
+    /// priority
+    pub priority: isize,
 }
 
 impl TaskControlBlockInner {
@@ -84,6 +93,9 @@ impl TaskControlBlockInner {
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+    pub fn set_priority(&mut self, prio: isize) {
+        self.priority = prio;
     }
 }
 
@@ -118,6 +130,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride: 0,
+                    pass: 0,
+                    priority: 16,
                 })
             },
         };
@@ -191,6 +206,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride: 0,
+                    pass: 0,
+                    priority: 16,
                 })
             },
         });
