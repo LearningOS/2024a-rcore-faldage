@@ -131,9 +131,7 @@ fn copy_struct<T>(addr: *mut T, src: T) {
         panic!("struct is splitted by two pages")
     }
 }
-/// YOUR JOB: get time with second and microsecond
-/// HINT: You might reimplement it with virtual memory management.
-/// HINT: What if [`TimeVal`] is splitted by two pages ?
+
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
     let us = get_time_us();
@@ -147,18 +145,14 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     0
 }
 
-/// YOUR JOB: Finish sys_task_info to pass testcases
-/// HINT: You might reimplement it with virtual memory management.
-/// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
+    trace!("kernel: sys_task_info");
     copy_struct(_ti, get_current_task_info());
     0
 }
 
-// YOUR JOB: Implement mmap.
 pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
-    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    trace!("kernel: sys_mmap");
     let num = (1 << PAGE_SIZE_BITS) - 1;
     if start & num != 0 {
         return -1;
@@ -191,9 +185,8 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     0
 }
 
-// YOUR JOB: Implement munmap.
 pub fn sys_munmap(start: usize, len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    trace!("kernel: sys_munmap");
     let start_va: VirtAddr = VirtAddr(start);
     let end_va: VirtAddr = VirtAddr(start + len);
     remove_framed_area_from_current_task(start_va, end_va)
@@ -209,21 +202,15 @@ pub fn sys_sbrk(size: i32) -> isize {
     }
 }
 
-/// YOUR JOB: Implement spawn.
-/// HINT: fork + exec =/= spawn
 pub fn sys_spawn(path: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
     let cur_task = current_task().unwrap();
-    let mut parent_inner = cur_task.inner_exclusive_access();
+    let mut cur_inner = cur_task.inner_exclusive_access();
 
-    let token = parent_inner.get_user_token();
+    let token = cur_inner.get_user_token();
     let path = translated_str(token, path);
     if let Some(data) = get_app_data_by_name(path.as_str()) {
         let new_task_control_block = Arc::new(TaskControlBlock::new(data));
-        parent_inner.children.push(new_task_control_block.clone());
+        cur_inner.children.push(new_task_control_block.clone());
         // modify kernel_sp in trap_cx
         // **** access child PCB exclusively
         let trap_cx = new_task_control_block
@@ -239,16 +226,15 @@ pub fn sys_spawn(path: *const u8) -> isize {
     }
 }
 
-// YOUR JOB: Set task priority.
 pub fn sys_set_priority(prio: isize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_set_priority",
         current_task().unwrap().pid.0
     );
     let cur_task = current_task().unwrap();
-    let mut parent_inner = cur_task.inner_exclusive_access();
+    let mut cur_inner = cur_task.inner_exclusive_access();
     if prio >= 2 {
-        parent_inner.set_priority(prio);
+        cur_inner.set_priority(prio);
         prio
     } else {
         -1
