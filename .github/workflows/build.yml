@@ -41,9 +41,9 @@ jobs:
           git clone https://github.com/LearningOS/rCore-Tutorial-Test-2024A.git ci-user/user
           rm /usr/local/cargo/config.toml
           ID=`git rev-parse --abbrev-ref HEAD | grep -oP 'ch\K[0-9]'`
-          cd ci-user && make test CHAPTER=$ID passwd=${{ secrets.BASE_TEST_TOKEN }} > ../output.txt
+          cd ci-user && make test CHAPTER=$ID passwd=${{ secrets.BASE_TEST_TOKEN }} 
           # cd ci-user && make test CHAPTER=$ID passwd=${{ secrets.BASE_TEST_TOKEN }}
-          cat ../output.txt
+
       - name: end
         id: end
         run: |
