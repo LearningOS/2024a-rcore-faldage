@@ -21,14 +21,8 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::get_app_data_by_name;
-use crate::loader::{get_app_data, get_num_app};
-use crate::mm::MapPermission;
-use crate::sync::UPSafeCell;
-use crate::timer::get_time_ms;
-use crate::trap::TrapContext;
+use crate::{loader::get_app_data_by_name, mm::MapPermission};
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
@@ -124,44 +118,22 @@ pub fn add_initproc() {
 
 /// Get status of current task.
 pub fn get_current_task_info() -> TaskInfo {
-    TASK_MANAGER.get_current_task_info()
+    current_task().unwrap().get_task_info()
 }
 /// Increase syscall count for current task.
 pub fn increase_syscall_times(syscall_id: usize) {
-    TASK_MANAGER.increase_syscall_times(syscall_id);
+    current_task().unwrap().increase_syscall_times(syscall_id);
 }
 
-/// Suspend the current 'Running' task and run the next task in task list.
-pub fn suspend_current_and_run_next() {
-    // There must be an application running.
-    let task = take_current_task().unwrap();
-
-    // ---- access current TCB exclusively
-    let mut task_inner = task.inner_exclusive_access();
-    let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
-    // Change status to Ready
-    task_inner.task_status = TaskStatus::Ready;
-    drop(task_inner);
-    // ---- release current PCB
-
-    // push back to ready queue.
-    add_task(task);
-    // jump to scheduling cycle
-    schedule(task_cx_ptr);
-}
-
-/// pid of usertests app in make run TEST=1
-pub const IDLE_PID: usize = 0;
-
-/// Exit the current 'Running' task and run the next task in task list.
-pub fn exit_current_and_run_next() {
-    mark_current_exited();
-    run_next_task();
-}
-
-/// Get the current 'Running' task's token.
-pub fn current_user_token() -> usize {
-    TASK_MANAGER.get_current_token()
+/// Insert framed virtual area
+pub fn insert_framed_area_to_current_task(
+    start_va: crate::mm::VirtAddr,
+    end_va: crate::mm::VirtAddr,
+    permission: MapPermission,
+) {
+    current_task()
+        .unwrap()
+        .insert_framed_area(start_va, end_va, permission);
 }
 
 /// Remove virtual area
@@ -169,9 +141,11 @@ pub fn remove_framed_area_from_current_task(
     start_va: crate::mm::VirtAddr,
     end_va: crate::mm::VirtAddr,
 ) -> isize {
-    TASK_MANAGER.remove_framed_area(start_va, end_va)
+    current_task().unwrap().remove_framed_area(start_va, end_va)
 }
 /// check if vpn is allocated
 pub fn check_vpn_allocated(start_va: crate::mm::VirtAddr, end_va: crate::mm::VirtAddr) -> bool {
-    TASK_MANAGER.check_vpn_allocated(start_va, end_va)
+    current_task()
+        .unwrap()
+        .check_vpn_allocated(start_va, end_va)
 }

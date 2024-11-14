@@ -1,9 +1,10 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::config::{BIG_STRIDE, MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
@@ -69,20 +70,17 @@ pub struct TaskControlBlockInner {
     /// Program break
     pub program_brk: usize,
 
-    /// The "length" the process has currently been running
-    pub stride: usize,
-
-    /// The value that stride needs to accumulate after the process is scheduled.
-    pub pass: usize,
-
-    /// priority
-    pub priority: isize,
-
     /// The count of each syscall
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
 
     /// The time (in ms) when the task is first scheduled
     pub start_time: usize,
+
+    /// The "length" the process has currently been running
+    pub stride: usize,
+
+    /// priority
+    pub priority: isize,
 }
 
 impl TaskControlBlockInner {
@@ -97,11 +95,26 @@ impl TaskControlBlockInner {
     fn get_status(&self) -> TaskStatus {
         self.task_status
     }
+    fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        self.syscall_times
+    }
+    fn get_start_time(&self) -> usize {
+        self.start_time
+    }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
     pub fn set_priority(&mut self, prio: isize) {
         self.priority = prio;
+    }
+    pub fn get_priority(&self) -> isize {
+        self.priority
+    }
+    pub fn add_stride(&mut self) {
+        self.stride += BIG_STRIDE / (self.priority as usize);
+    }
+    pub fn get_stride(&self) -> usize {
+        self.stride
     }
 }
 
@@ -137,7 +150,6 @@ impl TaskControlBlock {
                     heap_bottom: user_sp,
                     program_brk: user_sp,
                     stride: 0,
-                    pass: 0,
                     priority: 16,
                     start_time: 0,
                     syscall_times: [0; MAX_SYSCALL_NUM],
@@ -215,7 +227,6 @@ impl TaskControlBlock {
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
                     stride: 0,
-                    pass: 0,
                     priority: 16,
                     start_time: 0,
                     syscall_times: [0; MAX_SYSCALL_NUM],
@@ -263,6 +274,55 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// Get status of current task.
+    pub fn get_task_info(&self) -> TaskInfo {
+        let inner = self.inner_exclusive_access();
+        TaskInfo {
+            status: inner.get_status(),
+            syscall_times: inner.get_syscall_times(),
+            time: get_time_ms() - inner.get_start_time(),
+        }
+    }
+
+    /// Increase syscall count for current task.
+    pub fn increase_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner_exclusive_access();
+        inner.syscall_times[syscall_id] += 1;
+    }
+
+    /// Insert framed virtual area
+    pub fn insert_framed_area(
+        &self,
+        start_va: crate::mm::VirtAddr,
+        end_va: crate::mm::VirtAddr,
+        permission: MapPermission,
+    ) {
+        let mut inner = self.inner_exclusive_access();
+        inner
+            .memory_set
+            .insert_framed_area(start_va, end_va, permission);
+    }
+
+    /// Remove virtual area
+    pub fn remove_framed_area(
+        &self,
+        start_va: crate::mm::VirtAddr,
+        end_va: crate::mm::VirtAddr,
+    ) -> isize {
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set.remove_framed_area(start_va, end_va)
+    }
+
+    /// Check if vpn is allocated
+    pub fn check_vpn_allocated(
+        &self,
+        start_va: crate::mm::VirtAddr,
+        end_va: crate::mm::VirtAddr,
+    ) -> bool {
+        let inner = self.inner_exclusive_access();
+        inner.memory_set.check_vpn_allocated(start_va, end_va)
     }
 }
 
